@@ -348,3 +348,24 @@ MigrationBackup/
 
 # Ionide (cross platform F# VS Code tools) working folder
 .ionide/
+
+.DS_Store
+*__pycache__/
+.idea/
+local/*
+!local/README
+/data/
+!data/*.sh
+!data/preprocess.py
+/trace.csv
+*.csv
+*.pyc
+.mypy_cache
+/trace.yaml
+kge.egg-info
+docs/_build
+*.log
+*.prof
+/libkge.egg-info/
+!/docs/examples/dump-example-model.csv
+!/docs/examples/dump-example-search.csv

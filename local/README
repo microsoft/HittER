@@ -1,0 +1,2 @@
+Everything in this local directory is ignored and not added to the repository.
+Keep in this directory whatever you need for personal use, e.g. logs, embeddings, etc.
