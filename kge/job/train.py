@@ -4,7 +4,6 @@ import math
 import time
 import sys
 from collections import defaultdict
-
 from dataclasses import dataclass
 
 import torch
@@ -61,13 +60,19 @@ class TrainingJob(Job):
             self.model: KgeModel = KgeModel.create(config, dataset)
         else:
             self.model: KgeModel = model
-        self.optimizer = KgeOptimizer.create(config, self.model)
-        self.kge_lr_scheduler = KgeLRScheduler(config, self.optimizer)
         self.loss = KgeLoss.create(config)
         self.abort_on_nan: bool = config.get("train.abort_on_nan")
         self.batch_size: int = config.get("train.batch_size")
         self.device: str = self.config.get("job.device")
         self.train_split = config.get("train.split")
+
+        if config.exists("train.optimizer_args.schedule"):
+            config.set("train.optimizer_args.t_total",
+                    math.ceil(self.dataset.split(self.train_split).size(0)
+                                / self.batch_size) * config.get("train.max_epochs"),
+                    create=True, log=True)
+        self.optimizer = KgeOptimizer.create(config, self.model)
+        self.kge_lr_scheduler = KgeLRScheduler(config, self.optimizer)
 
         self.config.check("train.trace_level", ["batch", "epoch"])
         self.trace_batch: bool = self.config.get("train.trace_level") == "batch"
@@ -256,7 +261,7 @@ class TrainingJob(Job):
         torch.save(
             checkpoint, filename,
         )
-
+        
     def save_to(self, checkpoint: Dict) -> Dict:
         """Adds trainjob specific information to the checkpoint"""
         train_checkpoint = {
@@ -311,13 +316,15 @@ class TrainingJob(Job):
         backward_time = 0.0
         optimizer_time = 0.0
 
+        update_freq = self.config.get("train.update_freq")
         # process each batch
         for batch_index, batch in enumerate(self.loader):
             for f in self.pre_batch_hooks:
                 f(self)
 
             # process batch (preprocessing + forward pass + backward pass on loss)
-            self.optimizer.zero_grad()
+            if batch_index % update_freq == 0:
+                self.optimizer.zero_grad()
             batch_result: TrainingJob._ProcessBatchResult = self._process_batch(
                 batch_index, batch
             )
@@ -378,7 +385,8 @@ class TrainingJob(Job):
 
             # update parameters
             batch_optimizer_time = -time.time()
-            self.optimizer.step()
+            if batch_index % update_freq == update_freq - 1:
+                self.optimizer.step()
             batch_optimizer_time += time.time()
 
             # tracing/logging
@@ -391,7 +399,7 @@ class TrainingJob(Job):
                     "batch": batch_index,
                     "size": batch_result.size,
                     "batches": len(self.loader),
-                    "lr": [group["lr"] for group in self.optimizer.param_groups],
+                    "lr": self.optimizer.get_lr() if hasattr(self.optimizer, 'get_lr') else [group["lr"] for group in self.optimizer.param_groups],
                     "avg_loss": batch_result.avg_loss,
                     "penalties": [p.item() for k, p in penalties_torch],
                     "penalty": penalty,
@@ -448,7 +456,8 @@ class TrainingJob(Job):
             split=self.train_split,
             batches=len(self.loader),
             size=self.num_examples,
-            lr=[group["lr"] for group in self.optimizer.param_groups],
+            lr=self.optimizer.get_lr() if hasattr(self.optimizer, 'get_lr') else [
+                group["lr"] for group in self.optimizer.param_groups],
             avg_loss=sum_loss / self.num_examples,
             avg_penalty=sum_penalty / len(self.loader),
             avg_penalties={k: p / len(self.loader) for k, p in sum_penalties.items()},
@@ -560,19 +569,19 @@ class TrainingJobKvsAll(TrainingJob):
             if enabled
         ]
 
-        #' for each query type: list of queries
+        # for each query type: list of queries
         self.queries = {}
 
-        #' for each query type: list of all labels (concatenated across queries)
+        # for each query type: list of all labels (concatenated across queries)
         self.labels = {}
 
-        #' for each query type: list of starting offset of labels in self.labels. The
-        #' labels for the i-th query of query_type are in labels[query_type] in range
-        #' label_offsets[query_type][i]:label_offsets[query_type][i+1]
+        # for each query type: list of starting offset of labels in self.labels. The
+        # labels for the i-th query of query_type are in labels[query_type] in range
+        # label_offsets[query_type][i]:label_offsets[query_type][i+1]
         self.label_offsets = {}
 
-        #' for each query type (ordered as in self.query_types), index right after last
-        #' example of that type in the list of all examples
+        # for each query type (ordered as in self.query_types), index right after last
+        # example of that type in the list of all examples
         self.query_end_index = []
 
         # construct relevant data structures
@@ -1015,6 +1024,25 @@ class TrainingJobNegativeSampling(TrainingJob):
             loss_value, batch_size, prepare_time, forward_time, backward_time
         )
 
+def tiny_value_of_dtype(dtype: torch.dtype):
+    """
+    Returns a moderately tiny value for a given PyTorch data type that is used to avoid numerical
+    issues such as division by zero.
+    This is different from `info_value_of_dtype(dtype).tiny` because it causes some NaN bugs.
+    Only supports floating point dtypes.
+    """
+    if not dtype.is_floating_point:
+        raise TypeError("Only supports floating point dtypes.")
+    if dtype == torch.float or dtype == torch.double:
+        return 1e-13
+    elif dtype == torch.half:
+        return 1e-4
+    else:
+        raise TypeError("Does not support dtype " + str(dtype))
+
+def mask_score(vector, mask, demask):
+    mask[range(len(demask)), demask] = 0
+    return vector + (~mask + tiny_value_of_dtype(vector.dtype)).log()
 
 class TrainingJob1vsAll(TrainingJob):
     """Samples SPO pairs and queries sp_ and _po, treating all other entities as negative."""
@@ -1057,24 +1085,25 @@ class TrainingJob1vsAll(TrainingJob):
         batch_size = len(triples)
         prepare_time += time.time()
 
+        # combine two forward/backward pass to speed up
         # forward/backward pass (sp)
         forward_time = -time.time()
-        scores_sp = self.model.score_sp(triples[:, 0], triples[:, 1])
-        loss_value_sp = self.loss(scores_sp, triples[:, 2]) / batch_size
+        loss_value_sp = self.model("score_sp", triples[:, 0], triples[:, 1],
+                               gt_ent=triples[:, 2], gt_rel=triples[:, 1] + self.dataset.num_relations()).sum() / batch_size
         loss_value = loss_value_sp.item()
         forward_time += time.time()
         backward_time = -time.time()
-        loss_value_sp.backward()
+        # loss_value_sp.backward()
         backward_time += time.time()
 
         # forward/backward pass (po)
         forward_time -= time.time()
-        scores_po = self.model.score_po(triples[:, 1], triples[:, 2])
-        loss_value_po = self.loss(scores_po, triples[:, 0]) / batch_size
+        loss_value_po = self.model("score_po", triples[:, 1], triples[:, 2],
+                                gt_ent=triples[:, 0], gt_rel=triples[:, 1]).sum() / batch_size
         loss_value += loss_value_po.item()
         forward_time += time.time()
         backward_time -= time.time()
-        loss_value_po.backward()
+        (loss_value_po + loss_value_sp).backward()
         backward_time += time.time()
 
         # all done

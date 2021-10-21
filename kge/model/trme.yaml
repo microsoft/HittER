@@ -1,0 +1,33 @@
+import: [lookup_embedder]
+
+trme:
+  transformer_impl: pytorch
+  use_preln: false
+  use_rat: false
+  dim: -1
+  nlayer: 2
+  nhead: 2
+
+  # default values match the same number in pytorch implementation
+  ff_dim: 2048 # transformer FFN dimension
+  hidden_dropout: 0.1 # transformer hidden dropout
+  attn_dropout: 0.1 # transformer attention dropout
+  ctx_dropout: 0.5 # neighbor discrete dropout
+  output_dropout: 0.0 # entity embedding dropout in output
+  rel_dropout: 0.0
+  self_dropout: 0.0
+  mlm_mask: 0.6
+  mlm_replace: 0.3
+  add_mlm_loss: true
+  activation: relu
+  max_context_size: 0
+  similarity: DotProduct
+  initializer_range: 0.02 # transformer Linear and Embedding weight normal distribution std
+  class_name: TrmE
+  entity_embedder:
+    type: lookup_embedder
+    +++: +++
+  relation_embedder:
+    type: lookup_embedder
+    +++: +++
+

@@ -73,7 +73,8 @@ class KgeLoss:
                 temperature=temperature,
             )
         elif config.get("train.loss") == "kl":
-            return KLDivWithSoftmaxKgeLoss(config)
+            label_smoothing = config.get("train.loss_arg")
+            return KLDivWithSoftmaxKgeLoss(config, label_smoothing=label_smoothing)
         elif config.get("train.loss") == "margin_ranking":
             margin = config.get("train.loss_arg")
             if math.isnan(margin):
@@ -190,12 +191,22 @@ class BCEWithLogitsKgeLoss(KgeLoss):
 
 
 class KLDivWithSoftmaxKgeLoss(KgeLoss):
-    def __init__(self, config, reduction="sum", **kwargs):
+    def __init__(self, config, reduction="sum", label_smoothing=float('nan'), **kwargs):
         super().__init__(config)
+        if not math.isnan(label_smoothing):
+            assert 0.0 < label_smoothing <= 1.0
+            self.tgt_vocab_size = config.get("dataset.num_entities")
+            self.smoothing_value = label_smoothing / (self.tgt_vocab_size - 1)
+            self.confidence = 1.0 - label_smoothing
+
         self._celoss = torch.nn.CrossEntropyLoss(reduction=reduction, **kwargs)
         self._klloss = torch.nn.KLDivLoss(reduction=reduction, **kwargs)
 
     def __call__(self, scores, labels, **kwargs):
+        if hasattr(self, "confidence"):
+            model_prob = torch.ones_like(scores) * self.smoothing_value
+            model_prob.scatter_(1, labels.unsqueeze(1), self.confidence)
+            return F.kl_div(F.log_softmax(scores, dim=1), model_prob, reduction='sum')
         if labels.dim() == 1:
             # Labels are indexes of positive classes, i.e., we are in a multiclass
             # setting. Then kl divergence can be computed more efficiently using

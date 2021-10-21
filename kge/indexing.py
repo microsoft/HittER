@@ -2,6 +2,7 @@ import torch
 from collections import defaultdict, OrderedDict
 import numba
 import numpy as np
+import networkx as nx
 
 
 def _group_by(keys, values) -> dict:
@@ -81,6 +82,42 @@ def index_KvsAll_to_torch(index):
         torch.tensor([0] + list(map(len, index.values())), dtype=torch.int), 0
     )
     return keys, values, offsets
+
+
+def index_neighbor(dataset):
+    name = "neighbor"
+    if not dataset._indexes.get(name):
+        train_triples = dataset.split('train')
+        G = nx.DiGraph()
+        for tri in train_triples:
+            s, p, o = tri.tolist()
+            G.add_node(s)
+            G.add_node(o)
+            G.add_edge(s, o, type=p)
+        max_neighbor_num = 300
+        all_neighbor = torch.zeros((dataset.num_entities(), 2, max_neighbor_num), dtype=torch.long)
+        all_neighbor_num = torch.zeros(dataset.num_entities(), dtype=torch.long)
+        rng = np.random.default_rng()
+        for s in range(dataset.num_entities()):
+            if s not in G:
+                continue
+            suc = list(G.successors(s))
+            pre = list(G.predecessors(s))
+            suc_edge_types = [G.get_edge_data(s, v)['type'] + dataset.num_relations() for v in suc]
+            pre_edge_types = [G.get_edge_data(v, s)['type'] for v in pre]
+            rand_permut = rng.permutation(len(suc) + len(pre))
+            neighbor = np.asarray(suc + pre)[rand_permut]
+            neighbor_edge_types = np.asarray(suc_edge_types + pre_edge_types)[rand_permut]
+            neighbor = neighbor[:max_neighbor_num]
+            neighbor_edge_types = neighbor_edge_types[:max_neighbor_num]
+            all_neighbor[s, 0, 0:len(neighbor)] = torch.tensor(neighbor, dtype=torch.long)
+            all_neighbor[s, 1, 0:len(neighbor)] = torch.tensor(neighbor_edge_types, dtype=torch.long)
+            all_neighbor_num[s] = len(neighbor)
+        dataset._indexes[name] = (all_neighbor, all_neighbor_num)
+
+    dataset.config.log("Neighbors index finished", prefix="  ")
+
+    return dataset._indexes.get(name)
 
 
 def index_relation_types(dataset):
@@ -235,6 +272,7 @@ def create_default_index_functions(dataset: "Dataset"):
             dataset.index_functions[f"{split}_{key}_to_{value}"] = IndexWrapper(
                 index_KvsAll, split=split, key=key
             )
+    dataset.index_functions["neighbor"] = index_neighbor
     dataset.index_functions["relation_types"] = index_relation_types
     dataset.index_functions["relations_per_type"] = index_relations_per_type
     dataset.index_functions["frequency_percentiles"] = index_frequency_percentiles

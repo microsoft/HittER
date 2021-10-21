@@ -1,6 +1,9 @@
+import sys
+
 from kge import Config, Configurable
 import torch.optim
 from torch.optim.lr_scheduler import _LRScheduler
+from .bert_optim import Adamax
 
 
 class KgeOptimizer:
@@ -10,12 +13,17 @@ class KgeOptimizer:
     def create(config, model):
         """ Factory method for optimizer creation """
         try:
-            optimizer = getattr(torch.optim, config.get("train.optimizer"))
+            name = config.get("train.optimizer")
+            if name == "Adamax":
+                optimizer = Adamax
+            else:
+                optimizer = getattr(torch.optim, name)
             return optimizer(
                 [p for p in model.parameters() if p.requires_grad],
                 **config.get("train.optimizer_args")
             )
         except:
+            print(sys.exc_info()[0])
             # perhaps TODO: try class with specified name -> extensibility
             raise ValueError("train.optimizer")
 

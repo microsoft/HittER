@@ -1,0 +1,59 @@
+job.type: train
+dataset.name: fb15k-237
+model: trme
+
+random_seed:
+  python: 333
+  torch: 339
+  numpy: 333
+
+eval:
+  batch_size: 1024
+  metrics_per:
+    relation_type: true
+  trace_level: example
+
+train:
+  loss: kl
+  auto_correct: true
+  batch_size: 512
+  max_epochs: 300
+  lr_scheduler: "" #set empty here to use schedule below
+  loss_arg: .nan # disable label smoothing
+  optimizer: Adamax
+  optimizer_args:
+    lr: 0.01
+    warmup: 0.1
+    schedule: warmup_linear_xdl
+    eps: 1e-6
+    weight_decay: 0.01
+    max_grad_norm: 1.0
+  type: 1vsAll
+lookup_embedder:
+  dim: 320
+  dropout: 0.
+  initialize: normal_
+  initialize_args:
+    normal_:
+      std: 0.02
+trme:
+  transformer_impl: huggingface
+  activation: gelu
+  hidden_dropout: 0.1
+  attn_dropout: 0.1
+  ctx_dropout: 0.3
+  self_dropout: 0.5
+  max_context_size: 50
+  mlm_mask: 1.0
+  mlm_replace: 0.3 # no effect since mlm_mask=1
+  add_mlm_loss: false
+  output_dropout: 0.6
+  nlayer: 6
+  nhead: 8
+  ff_dim: 1280
+valid:
+  early_stopping:
+    min_threshold:
+      epochs: 50
+      metric_value: 0.05
+    patience: 10

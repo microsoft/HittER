@@ -257,6 +257,17 @@ class KgeEmbedder(KgeBase):
         raise NotImplementedError
 
 
+class _CustomDataParallel(torch.nn.DataParallel):
+    def __init__(self, model):
+        super(_CustomDataParallel, self).__init__(model)
+
+    def __getattr__(self, name):
+        try:
+            return super(_CustomDataParallel, self).__getattr__(name)
+        except AttributeError:
+            return getattr(self.module, name)
+
+
 class KgeModel(KgeBase):
     r"""Generic KGE model for KBs with a fixed set of entities and relations.
 
@@ -294,6 +305,8 @@ class KgeModel(KgeBase):
 
             #: Embedder used for relations
             num_relations = dataset.num_relations()
+            if self.get_option("class_name") == "TrmE":
+                num_relations *= 2
             self._relation_embedder = KgeEmbedder.create(
                 config,
                 dataset,
@@ -340,6 +353,8 @@ class KgeModel(KgeBase):
         try:
             model = getattr(module, class_name)(config, dataset, configuration_key)
             model.to(config.get("job.device"))
+            if config.get('job.multi_gpu'):
+                model = _CustomDataParallel(model)
             return model
         except ImportError:
             # perhaps TODO: try class with specified name -> extensibility
@@ -421,6 +436,7 @@ class KgeModel(KgeBase):
             import tempfile
 
             config.log_folder = tempfile.mkdtemp(prefix="kge-")
+            config.print("Use", config.log_folder, "as temp log folder.")
         else:
             config.log_folder = checkpoint["folder"]
             if not config.log_folder or not os.path.exists(config.log_folder):
@@ -472,6 +488,9 @@ class KgeModel(KgeBase):
 
     def get_scorer(self) -> RelationalScorer:
         return self._scorer
+    
+    def forward(self, fn_name, *args, **kwargs):
+        return getattr(self, fn_name)(*args, **kwargs)
 
     def score_spo(self, s: Tensor, p: Tensor, o: Tensor, direction=None) -> Tensor:
         r"""Compute scores for a set of triples.

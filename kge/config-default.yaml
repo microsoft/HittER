@@ -12,6 +12,8 @@ job:
   # Main device to use for this job (e.g., 'cpu', 'cuda', 'cuda:0')
   device: 'cuda'
 
+  multi_gpu: True
+
 # The seeds of the PRNGs can be set manually for (increased) reproducability.
 # Use -1 to use default seed.
 random_seed:
@@ -160,11 +162,16 @@ train:
   #              scores (e.g., TransE, RotatE).
   loss_arg: .nan
 
+  filt_loss: false
+
   # Maximum number of epochs used for training
   max_epochs: 20
 
   # Batch size used for training.
   batch_size: 100
+
+  # Update frequency. n>1 to achieve gradient accumulation
+  update_freq: 1
 
   # Number of workers used to construct batches. Leave at 0 for default (no
   # separate workers). On Windows, only 0 is supported.
@@ -351,7 +358,7 @@ eval:
   tie_handling: rounded_mean_rank
 
   # Compute Hits@K for these choices of K
-  hits_at_k_s: [1, 3, 10, 50, 100, 200, 300, 400, 500, 1000]
+  hits_at_k_s: [1, 3, 10]
 
   # Batch size used during evaluation
   batch_size: 100
