@@ -354,9 +354,9 @@ MigrationBackup/
 .idea/
 local/*
 !local/README
-/data/
-!data/*.sh
-!data/preprocess.py
+/data/*
+!/data/*.sh
+!/data/preprocess.py
 /trace.csv
 *.csv
 *.pyc

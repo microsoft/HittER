@@ -1,14 +1,51 @@
-# Project
+<h1 align="center">HittER</h1>
+<h5 align="center">Hierarchical Transformers for Knowledge Graph Embeddings</h5>
 
-> This repo has been populated by an initial template to help get you started. Please
-> make sure to update the content to build a great experience for community-building.
+HittER generates embeddings for knowledge graphs and performs link prediction using a hierarchical Transformer model.
+It will appear in EMNLP 2021 ([arXiv version](https://arxiv.org/abs/2008.12813)).
 
-As the maintainer of this project, please make a few updates:
+## Installation
 
-- Improving this README.MD file to provide a great experience
-- Updating SUPPORT.MD with content about this project's support experience
-- Understanding the security reporting process in SECURITY.MD
-- Remove this section from the README
+The repo requires python>=3.7, anaconda and a new env is recommended.
+
+
+``` sh
+conda create -n hitter python=3.7 -y # optional
+conda activate hitter # optional
+git clone git@github.com:microsoft/HittER.git
+cd HittER
+pip install -e .
+```
+
+### Data
+
+First download the standard benchmark datasets using the commands below. Thanks [LibKGE](https://github.com/uma-pi1/kge) for providing the preprocessing scripts and hosting the data.
+
+``` sh
+cd data
+sh download_standard.sh
+```
+
+### Training
+
+Configurations for the experiments are in the `/config` folder.
+
+``` sh
+python -m kge start config/trmeh-fb15k237-best.yaml
+```
+
+The training process uses DataParallel in all visible GPUs by default, which can be overrode by appending `--job.device cpu` to the command above.
+
+### Evaluation
+
+You can evaluate the trained models on dev/test set using the following commands.
+
+``` sh
+python -m kge eval <saved_dir>
+python -m kge test <saved_dir>
+```
+
+Pretrained [models](https://github.com/sanxing-chen/kge/releases) are also released for reproducibility.
 
 ## Contributing
 
@@ -31,3 +68,16 @@ trademarks or logos is subject to and must follow
 [Microsoft's Trademark & Brand Guidelines](https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks/usage/general).
 Use of Microsoft trademarks or logos in modified versions of this project must not cause confusion or imply Microsoft sponsorship.
 Any use of third-party trademarks or logos are subject to those third-party's policies.
+
+## Citation
+
+```
+@inproceedings{chen-etal-2021-hitter,
+    title = "HittER: Hierarchical Transformers for Knowledge Graph Embeddings",
+    author = "Chen, Sanxing and Liu, Xiaodong and Gao, Jianfeng and Jiao, Jian and Zhang, Ruofei and Ji, Yangfeng",
+    booktitle = "Proceedings of the 2021 Conference on Empirical Methods in Natural Language Processing (EMNLP)",
+    month = nov,
+    year = "2021",
+    publisher = "Association for Computational Linguistics"
+}
+```
