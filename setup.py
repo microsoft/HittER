@@ -9,7 +9,7 @@ setup(
     author_email="opencode@microsoft.com",
     packages=["kge"],
     install_requires=[
-        "torch>=1.3.1",
+        "torch==1.4.0",
         "pyyaml",
         "pandas",
         "argparse",
