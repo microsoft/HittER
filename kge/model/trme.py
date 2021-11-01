@@ -229,6 +229,9 @@ class TrmE(KgeModel):
         del self._scorer._entity_embedder
         del self._scorer._relation_embedder
 
+        if fn_name == 'get_hitter_repr':
+            return scores
+
         if self.training:
             self_loss_w = self.get_option("self_dropout")
             # MLM-like loss is weighted by the proportion of entities sampled

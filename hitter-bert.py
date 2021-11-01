@@ -230,7 +230,7 @@ class CrossTrmFinetuner(pl.LightningModule):
         if self._hparams['use_hitter']:
             # kg_masks: [bs, 1, 1, length]
             # kg_embeds: nlayer*[bs, length, dim]
-            kg_embeds, kg_masks = self.hitter('get_hitter_repr', s=s, p=p)
+            kg_embeds, kg_masks = self.hitter('get_hitter_repr', s, p)
             kg_attentions = [None] * 2 + [(self.cross_attentions[i], kg_embeds[(i + 2) // 2], kg_masks)
                                           for i in range(self.kg_layer_num)]
         else:
