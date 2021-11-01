@@ -70,7 +70,7 @@ class TrmEScorer(RelationalScorer):
         self.atom_encoder.config = config
         self.atom_encoder.apply(partial(BertPreTrainedModel.init_bert_weights, self.atom_encoder))
 
-    def _get_encoder_output(self, e_emb, p_emb, ids, gt_ent, gt_rel):
+    def _get_encoder_output(self, e_emb, p_emb, ids, gt_ent, gt_rel, output_repr=False):
         n = p_emb.size(0)
         device = p_emb.device
 
@@ -96,7 +96,7 @@ class TrmEScorer(RelationalScorer):
         ctx_size = ctx_size + 2
         attention_mask = sc.get_mask_from_sequence_lengths(ctx_size, self.max_context_size + 2)
 
-        if self.training:
+        if self.training and not output_repr:
             # mask out ground truth during training to avoid overfitting
             gt_mask = ((entity_ids != gt_ent.view(n, 1)) | (relation_ids != gt_rel.view(n, 1)))
             ctx_random_mask = (attention_mask
@@ -108,7 +108,7 @@ class TrmEScorer(RelationalScorer):
         entity_emb = self._entity_embedder().embed(entity_ids)
         relation_emb = self._relation_embedder().embed(relation_ids)
 
-        if self.training and self.get_option("self_dropout") > 0 and self.max_context_size > 0:
+        if self.training and self.get_option("self_dropout") > 0 and self.max_context_size > 0 and not output_repr:
             # sample a proportion of input for masked prediction similar to the MLM in BERT
             self_dropout_sample = sc.get_bernoulli_mask([n], self.get_option("self_dropout"), device)
 
@@ -133,7 +133,7 @@ class TrmEScorer(RelationalScorer):
         pos = self.atomic_type_embeds(torch.arange(0, 3, device=device)).unsqueeze(0).repeat(src.shape[0], 1, 1)
         src = torch.cat([self.cls.expand(src.size(0), 1, self.dim), src], dim=1) + pos
 
-        src = F.dropout(src, p=self.get_option("output_dropout"), training=self.training)
+        src = F.dropout(src, p=self.get_option("output_dropout"), training=self.training and not output_repr)
         src = self.atomic_layer_norm(src)
 
         # [bs, dim]
@@ -159,7 +159,12 @@ class TrmEScorer(RelationalScorer):
 
         src = F.dropout(src, p=self.get_option("hidden_dropout"), training=self.training)
         src = self.layer_norm(src)
-        out = self.transformer_encoder(src, None, self.convert_mask_rat(attention_mask))[:,:2]
+        out = self.transformer_encoder(src, None, self.convert_mask_rat(attention_mask))
+
+        if output_repr:
+            return out, self.convert_mask(attention_mask)
+
+        out = out[-1][:,:2]
 
         # compute the mlm-like loss if needed
         if self.training and self.get_option("add_mlm_loss") and self.get_option("self_dropout") > 0.0 and self_dropout_sample.sum() > 0:
@@ -231,6 +236,11 @@ class TrmE(KgeModel):
             return self.loss(scores[0], kwargs["gt_ent"]) + self_loss_w * scores[1] * scores[0].size(0)
         else:
             return scores
+
+    def get_hitter_repr(self, s, p):
+        s_emb = self.get_s_embedder().embed(s)
+        p_emb = self.get_p_embedder().embed(p)
+        return self._scorer._get_encoder_output(s_emb, p_emb, s, None, None, output_repr=True)
 
     def score_spo(self, s: Tensor, p: Tensor, o: Tensor, direction=None) -> Tensor:
         s_emb = self.get_s_embedder().embed(s)

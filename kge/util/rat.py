@@ -154,9 +154,11 @@ class Encoder(nn.Module):
 
     def forward(self, x, relation, mask):
         "Pass the input (and mask) through each layer in turn."
+        all_x = []
         for layer in self.layers:
             x = layer(x, relation, mask)
-        return x
+            all_x.append(x)
+        return all_x
         # return self.norm(x)
     
     def init_bert_weights(self, module):

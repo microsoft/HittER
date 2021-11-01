@@ -6,6 +6,50 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+import random
+import numpy as np
+
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Generator,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    Tuple,
+    TypeVar,
+    Union,
+)
+
+
+def set_seed(seed: int):
+    """
+    Helper function for reproducible behavior to set the seed in ``random``, ``numpy``, ``torch``.
+
+    Args:
+        seed (:obj:`int`): The seed to set.
+    """
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    # ^^ safe to call this function even if cuda is not available
+
+
+def pad_seq_of_seq(
+    sequence: List[List],
+    default_value: Callable[[], Any] = lambda: 0,
+    padding_on_right: bool = True,
+) -> Tuple[List[List], List]:
+    lens = [len(i) for i in sequence]
+    desired_length = max(lens)
+    if padding_on_right:
+        return [i + [default_value()] * (desired_length - len(i)) for i in sequence], lens
+    else:
+        return [[default_value()] * (desired_length - len(i)) + i for i in sequence], lens
+
 
 def get_mask_from_sequence_lengths(sequence_lengths: torch.Tensor, max_length: int) -> torch.BoolTensor:
     """
@@ -23,11 +67,13 @@ def get_mask_from_sequence_lengths(sequence_lengths: torch.Tensor, max_length: i
     range_tensor = ones.cumsum(dim=1)
     return sequence_lengths.unsqueeze(1) >= range_tensor
 
+
 def get_randperm_from_lengths(sequence_lengths: torch.Tensor, max_length: int):
     rand_vector = sequence_lengths.new_empty((len(sequence_lengths), max_length), dtype=torch.float).uniform_(0.1, 1)
     rand_vector.masked_fill_(~get_mask_from_sequence_lengths(sequence_lengths, max_length), 0)
     perm_vector = rand_vector.argsort(descending=True)
     return perm_vector
+
 
 def get_bernoulli_mask(shape, prob, device):
     return torch.bernoulli(torch.full(shape, prob, device=device)).bool()

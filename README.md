@@ -47,6 +47,36 @@ python -m kge test <saved_dir>
 
 Pretrained [models](https://github.com/sanxing-chen/kge/releases) are also released for reproducibility.
 
+### HittER-BERT QA experiments
+
+QA experiment-related data can be downloaded from the release.
+
+``` sh
+git submodule update --init
+cd transformers
+pip install -e .
+```
+
+Run experiments
+``` sh
+> python hitter-bert.py --help
+
+usage: hitter-bert.py [-h] [--dataset {fbqa,webqsp}] [--filtered] [--hitter]
+                      [--seed SEED]
+                      [exp_name]
+
+positional arguments:
+  exp_name              Name of the experiment
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --dataset {fbqa,webqsp}
+                        fbqa or webqsp
+  --filtered            Filtered or not
+  --hitter              Use pretrained HittER or not
+  --seed SEED           Seed number
+```
+
 ## Contributing
 
 This project welcomes contributions and suggestions.  Most contributions require you to agree to a

@@ -11,5 +11,6 @@ dataclasses
 # see http://numba.pydata.org/numba-doc/0.48.0/reference/pysupported.html
 numba==0.48.0
 pytorch-pretrained-bert==0.6.0
-regex==2020.5.14
 networkx==2.4
+regex==2020.5.14
+pytorch_lightning==1.3.1
