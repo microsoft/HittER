@@ -45,7 +45,7 @@ python -m kge eval <saved_dir>
 python -m kge test <saved_dir>
 ```
 
-Pretrained [models](https://github.com/sanxing-chen/kge/releases) are also released for reproducibility.
+Pretrained [models](https://github.com/microsoft/HittER/releases/tag/v1.0.0) are also released for reproducibility.
 
 ### HittER-BERT QA experiments
 
